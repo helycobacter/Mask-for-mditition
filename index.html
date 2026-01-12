@@ -126,16 +126,20 @@
     }
 
     function render() {
+        // Очищення фону з легким шлейфом
         ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
         ctx.fillRect(0, 0, w, h);
 
+        // Динамічний розмір зірки залежно від ширини екрана (адаптивність)
+        // На мобільних вона буде трохи меншою, щоб не займала весь простір
+        const baseSize = Math.min(w, h) * 0.4; 
         const growth = 0.7 + Math.sin(t * 1.5) * 0.3;
 
         // "Дихання" фонової картинки
         const bg = document.getElementById('bg');
         bg.style.opacity = 0.4 + (growth * 0.6);
 
-        // Зірки
+        // Тунель зірок
         stars.forEach(s => {
             s.z -= 0.7; if (s.z <= 0) s.z = w;
             const px = (s.x / s.z) * w + w / 2;
@@ -147,11 +151,17 @@
         if (isLaunched) {
             if (flowerAlpha < 1) flowerAlpha += 0.005;
             ctx.save();
-            // ВАШЕ НАЛАШТУВАННЯ: Центр + 30 пікселів вниз
-            ctx.translate(w/2, h/2 + 30);
+            
+            // АДАПТИВНЕ ЗМІЩЕННЯ:
+            // h/2 — центр. 
+            // h * 0.05 — це приблизно ті самі 30-40 пікселів, але у % від висоти екрана.
+            // Якщо зірка все ще низько, змініть 0.05 на 0.03. Якщо високо — на 0.07.
+            ctx.translate(w/2, h/2 + (h * 0.05));
+            
             ctx.globalAlpha = flowerAlpha;
             for(let i=0; i<8; i++) {
-                drawZenFlower(180 * growth, (Math.PI*2/8)*i + (t*0.05), '#fa0');
+                // Розмір пелюсток тепер залежить від baseSize
+                drawZenFlower(baseSize * growth, (Math.PI*2/8)*i + (t*0.05), '#fa0');
             }
             ctx.restore();
         }
