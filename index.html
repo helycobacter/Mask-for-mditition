@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Zen Mask: Ultimate Resonance</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; }
+        
+        /* Шар з маскою */
+        #bg {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: url('mask.png') no-repeat center center;
+            background-size: contain;
+            z-index: 1;
+            transition: opacity 1s;
+        }
+
+        canvas { position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none; mix-blend-mode: screen; }
+
+        #intro {
+            position: absolute; z-index: 100; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: black; transition: 2s; color: #fa0; font-family: 'Courier New', monospace;
+        }
+
+        .controls {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            z-index: 110; text-align: center; opacity: 0.2; transition: 0.8s;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .controls:hover { opacity: 1; }
+
+        .btn-row { display: flex; gap: 10px; justify-content: center; }
+        button { background: none; border: 1px solid #fa0; color: #fa0; padding: 10px 20px; cursor: pointer; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
+        button:hover { background: rgba(255, 170, 0, 0.1); }
+        
+        input[type=range] { width: 200px; accent-color: #fa0; cursor: pointer; }
+        #timer-display { color: #fa0; font-size: 10px; margin-top: 5px; height: 12px; }
+    </style>
+</head>
+<body>
+
+<div id="intro">
+    <h1 style="font-weight: 100; letter-spacing: 8px; font-size: 14px;">ARCHER RESONANCE</h1>
+    <button onclick="start()">[ АКТИВУВАТИ ]</button>
+</div>
+
+<div id="bg"></div>
+<canvas id="canvas"></canvas>
+
+<div class="controls">
+    <div class="btn-row">
+        <button onclick="toggleFullScreen()">[ ПОВНИЙ ЕКРАН ]</button>
+        <button id="sleepBtn" onclick="startTimer(30)">[ ТАЙМЕР 30 ХВ ]</button>
+    </div>
+    <input type="range" id="vol" min="0" max="1" step="0.01" value="0.5">
+    <div id="timer-display"></div>
+</div>
+
+<script>
+    let audioCtx, masterGain, isLaunched = false, t = 0, flowerAlpha = 0;
+    let timerInterval, timeLeft = 0;
+    const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
+    let w, h, stars = [];
+
+    function init() {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+        stars = []; 
+        for (let i = 0; i < 250; i++) stars.push({ x: Math.random()*w-w/2, y: Math.random()*h-h/2, z: Math.random()*w });
+    }
+
+    async function start() {
+        document.getElementById('intro').style.opacity = '0';
+        setTimeout(() => document.getElementById('intro').style.display = 'none', 2000);
+        
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0;
+        masterGain.connect(audioCtx.destination);
+
+        // 432Hz
+        const osc = audioCtx.createOscillator();
+        osc.frequency.value = 432;
+        const oGain = audioCtx.createGain(); oGain.gain.value = 0.15;
+        osc.connect(oGain).connect(masterGain);
+        osc.start();
+
+        // Fire Noise
+        const bSize = 2 * audioCtx.sampleRate, bBuffer = audioCtx.createBuffer(1, bSize, audioCtx.sampleRate), bOut = bBuffer.getChannelData(0);
+        let lastOut = 0;
+        for (let i = 0; i < bSize; i++) {
+            let white = Math.random() * 2 - 1;
+            bOut[i] = (lastOut + (0.02 * white)) / 1.002;
+            lastOut = bOut[i]; bOut[i] *= 3.5;
+        }
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = bBuffer; noise.loop = true;
+        const nGain = audioCtx.createGain(); nGain.gain.value = 0.1;
+        noise.connect(nGain).connect(masterGain);
+        noise.start();
+
+        // MP3
+        try {
+            const res = await fetch('audio.mp3');
+            const buf = await res.arrayBuffer();
+            const aBuf = await audioCtx.decodeAudioData(buf);
+            const src = audioCtx.createBufferSource();
+            src.buffer = aBuf; src.loop = true;
+            src.connect(masterGain);
+            src.start();
+        } catch(e) {}
+
+        masterGain.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 4);
+        isLaunched = true;
+    }
+
+    function drawZenFlower(len, ang, col) {
+        ctx.save(); ctx.rotate(ang);
+        ctx.strokeStyle = col; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.bezierCurveTo(40, len*0.3, 40, len*0.7, 0, len);
+        ctx.bezierCurveTo(-40, len*0.7, -40, len*0.3, 0, 0);
+        ctx.stroke(); ctx.restore();
+    }
+
+    function render() {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+        ctx.fillRect(0, 0, w, h);
+
+        const growth = 0.7 + Math.sin(t * 1.5) * 0.3;
+
+        // "Дихання" фонової картинки
+        const bg = document.getElementById('bg');
+        bg.style.opacity = 0.4 + (growth * 0.6);
+
+        // Зірки
+        stars.forEach(s => {
+            s.z -= 0.7; if (s.z <= 0) s.z = w;
+            const px = (s.x / s.z) * w + w / 2;
+            const py = (s.y / s.z) * h + h / 2;
+            ctx.fillStyle = `rgba(255, 170, 0, ${1 - s.z/w})`;
+            ctx.beginPath(); ctx.arc(px, py, (1-s.z/w)*1.5, 0, Math.PI*2); ctx.fill();
+        });
+
+        if (isLaunched) {
+            if (flowerAlpha < 1) flowerAlpha += 0.005;
+            ctx.save();
+            // ВАШЕ НАЛАШТУВАННЯ: Центр + 30 пікселів вниз
+            ctx.translate(w/2, h/2 + 30);
+            ctx.globalAlpha = flowerAlpha;
+            for(let i=0; i<8; i++) {
+                drawZenFlower(180 * growth, (Math.PI*2/8)*i + (t*0.05), '#fa0');
+            }
+            ctx.restore();
+        }
+
+        t += 0.02; requestAnimationFrame(render);
+    }
+
+    // Таймер сну
+    function startTimer(minutes) {
+        timeLeft = minutes * 60;
+        clearInterval(timerInterval);
+        document.getElementById('sleepBtn').innerText = "[ ТАЙМЕР АКТИВНИЙ ]";
+        
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            let m = Math.floor(timeLeft / 60);
+            let s = timeLeft % 60;
+            document.getElementById('timer-display').innerText = `ДО ВИМКНЕННЯ: ${m}:${s < 10 ? '0'+s : s}`;
+
+            if (timeLeft <= 300) { // Останні 5 хвилин - плавне згасання
+                let fade = timeLeft / 300;
+                if(masterGain) masterGain.gain.value = (document.getElementById('vol').value) * fade;
+                document.getElementById('bg').style.opacity = 0.5 * fade;
+            }
+
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                location.reload(); // Перезавантаження для повної зупинки
+            }
+        }, 1000);
+    }
+
+    function toggleFullScreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+        } else {
+            if (document.exitFullscreen) document.exitFullscreen();
+        }
+    }
+
+    document.getElementById('vol').oninput = (e) => {
+        if(masterGain) masterGain.gain.value = e.target.value;
+    };
+
+    window.onresize = init;
+    init(); render();
+</script>
+</body>
+</html>
