@@ -3,45 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Zen Mask: Ultimate</title>
+    <title>Zen Mask: Final Fix</title>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; -webkit-tap-highlight-color: transparent; }
-        #bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: url('mask.png') no-repeat center center; background-size: contain; z-index: 1; pointer-events: none; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; }
+        #bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: url('mask.png') no-repeat center center; background-size: contain; z-index: 1; opacity: 0.5; }
         canvas { position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none; mix-blend-mode: screen; }
-        #intro { position: absolute; z-index: 100; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: black; transition: 1s; color: #fa0; font-family: 'Courier New', monospace; }
-        .controls { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 110; text-align: center; display: flex; flex-direction: column; gap: 12px; width: 280px; opacity: 0.6; }
-        .btn-row { display: flex; gap: 10px; justify-content: center; width: 100%; }
-        button { background: rgba(0,0,0,0.5); border: 1px solid #fa0; color: #fa0; padding: 12px; cursor: pointer; font-size: 11px; letter-spacing: 1px; flex: 1; text-transform: uppercase; font-family: inherit; outline: none; }
-        button:active { background: #fa0; color: #000; }
-        input[type=range] { width: 100%; height: 20px; accent-color: #fa0; cursor: pointer; }
-        #timer-display { color: #fa0; font-size: 10px; margin-top: 4px; font-family: monospace; }
+        #intro { position: absolute; z-index: 100; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: black; transition: 1s; color: #fa0; text-align: center; }
+        .controls { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 110; display: flex; flex-direction: column; gap: 10px; width: 280px; opacity: 0.5; }
+        button { background: none; border: 1px solid #fa0; color: #fa0; padding: 12px; cursor: pointer; text-transform: uppercase; font-size: 11px; }
+        #status { font-size: 9px; margin-top: 15px; color: #666; }
     </style>
 </head>
 <body>
 
 <div id="intro">
-    <h1 style="font-weight: 100; letter-spacing: 5px; font-size: 18px; margin-bottom: 30px;">ARCHER RESONANCE</h1>
-    <button id="mainStartBtn" style="flex:none; width: 200px;">[ АКТИВУВАТИ ]</button>
+    <h1 style="font-weight: 100; letter-spacing: 5px;">ARCHER RESONANCE</h1>
+    <button id="startBtn">[ ЗАПУСТИТИ РЕЗОНАНС ]</button>
+    <div id="status">Очікування медіафайлів...</div>
 </div>
 
 <div id="bg"></div>
 <canvas id="canvas"></canvas>
 
 <div class="controls">
-    <div class="btn-row">
-        <button id="fullBtn">[ ПОВНИЙ ]</button>
-        <button id="sleepBtn">[ СОН 30 ]</button>
-    </div>
     <input type="range" id="vol" min="0" max="1" step="0.01" value="0.5">
-    <div id="timer-display"></div>
+    <div id="timer-display" style="color:#fa0; font-size:10px; text-align:center;"></div>
 </div>
 
 <script>
     let audioCtx, masterGain, isLaunched = false, t = 0, flowerAlpha = 0;
-    let timerInterval, timeLeft = 0;
     const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
     let w, h, stars = [];
-    const imgObj = new Image(); imgObj.src = 'mask.png';
+    let audioBuffer = null;
+
+    const imgObj = new Image();
+    imgObj.src = 'mask.png';
+    imgObj.onload = () => { document.getElementById('status').innerText += " | МАСКА OK"; init(); };
+
+    // Попереднє завантаження музики
+    async function preloadAudio() {
+        try {
+            const response = await fetch('audio.mp3');
+            if (!response.ok) throw new Error();
+            const arrayBuffer = await response.arrayBuffer();
+            document.getElementById('status').innerText += " | МУЗИКА ЗАВАНТАЖЕНА";
+            return arrayBuffer;
+        } catch (e) {
+            document.getElementById('status').innerText += " | МУЗИКА НЕ ЗНАЙДЕНА";
+            return null;
+        }
+    }
+
+    const audioDataPromise = preloadAudio();
 
     function init() {
         w = canvas.width = window.innerWidth;
@@ -49,34 +62,21 @@
         stars = []; for (let i = 0; i < 150; i++) stars.push({ x: Math.random()*w-w/2, y: Math.random()*h-h/2, z: Math.random()*w });
     }
 
-    function getMaskAnchor() {
-        if (!imgObj.complete || imgObj.width === 0) return { x: w/2, y: h/2, scale: h/1000 };
-        const imgRatio = imgObj.width / imgObj.height;
-        const screenRatio = w / h;
-        let drawW, drawH;
-        if (screenRatio > imgRatio) { drawH = h; drawW = h * imgRatio; }
-        else { drawW = w; drawH = w / imgRatio; }
-        return {
-            x: (w - drawW) / 2 + drawW / 2,
-            y: (h - drawH) / 2 + drawH / 2 + (drawH * 0.038),
-            scale: drawH / 1000
-        };
-    }
-
     async function start() {
-        if (audioCtx) { audioCtx.resume(); return; }
-        
-        document.getElementById('intro').style.opacity = '0';
-        setTimeout(() => document.getElementById('intro').style.display = 'none', 1000);
-        
+        if (isLaunched) return;
+
+        // Створюємо аудіоконтекст ПІСЛЯ кліку
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+
         masterGain = audioCtx.createGain();
         masterGain.gain.value = 0;
         masterGain.connect(audioCtx.destination);
 
+        // 432Hz та Шум (генеруються кодом, тому працюють завжди)
         const osc = audioCtx.createOscillator();
         osc.frequency.value = 432;
-        const oGain = audioCtx.createGain(); oGain.gain.value = 0.12;
+        const oGain = audioCtx.createGain(); oGain.gain.value = 0.15;
         osc.connect(oGain).connect(masterGain);
         osc.start();
 
@@ -89,22 +89,39 @@
         }
         const noise = audioCtx.createBufferSource();
         noise.buffer = bBuffer; noise.loop = true;
-        const nGain = audioCtx.createGain(); nGain.gain.value = 0.06;
+        const nGain = audioCtx.createGain(); nGain.gain.value = 0.08;
         noise.connect(nGain).connect(masterGain);
         noise.start();
 
-        try {
-            const res = await fetch('audio.mp3');
-            const buf = await res.arrayBuffer();
-            const aBuf = await audioCtx.decodeAudioData(buf);
-            const src = audioCtx.createBufferSource();
-            src.buffer = aBuf; src.loop = true;
-            src.connect(masterGain);
-            src.start();
-        } catch(e) {}
+        // Запуск MP3
+        const rawData = await audioDataPromise;
+        if (rawData) {
+            const decodedData = await audioCtx.decodeAudioData(rawData);
+            const source = audioCtx.createBufferSource();
+            source.buffer = decodedData;
+            source.loop = true;
+            source.connect(masterGain);
+            source.start(0);
+        }
 
-        masterGain.gain.linearRampToValueAtTime(document.getElementById('vol').value, audioCtx.currentTime + 3);
+        masterGain.gain.linearRampToValueAtTime(document.getElementById('vol').value, audioCtx.currentTime + 2);
+        
+        document.getElementById('intro').style.opacity = '0';
+        setTimeout(() => document.getElementById('intro').style.display = 'none', 1000);
         isLaunched = true;
+    }
+
+    function getMaskAnchor() {
+        const imgRatio = imgObj.complete ? imgObj.width / imgObj.height : 1;
+        const screenRatio = w / h;
+        let drawW, drawH;
+        if (screenRatio > imgRatio) { drawH = h; drawW = h * imgRatio; }
+        else { drawW = w; drawH = w / imgRatio; }
+        return {
+            x: (w - drawW) / 2 + drawW / 2,
+            y: (h - drawH) / 2 + drawH / 2 + (drawH * 0.038),
+            scale: drawH / 1000
+        };
     }
 
     function drawZenFlower(len, ang, col) {
@@ -121,8 +138,7 @@
         ctx.fillRect(0, 0, w, h);
         const anchor = getMaskAnchor();
         const growth = 0.7 + Math.sin(t * 1.5) * 0.3;
-        document.getElementById('bg').style.opacity = 0.4 + (growth * 0.5);
-
+        
         stars.forEach(s => {
             s.z -= 1.2; if (s.z <= 0) s.z = w;
             const px = (s.x / s.z) * w + w / 2;
@@ -132,59 +148,26 @@
         });
 
         if (isLaunched) {
-            if (flowerAlpha < 1) flowerAlpha += 0.005;
+            if (flowerAlpha < 1) flowerAlpha += 0.01;
             ctx.save();
             ctx.translate(anchor.x, anchor.y);
             ctx.globalAlpha = flowerAlpha;
             const size = 220 * anchor.scale * growth; 
             for(let i=0; i<8; i++) drawZenFlower(size, (Math.PI*2/8)*i + (t*0.04), '#fa0');
             ctx.restore();
+            document.getElementById('bg').style.opacity = 0.4 + (growth * 0.5);
         }
         t += 0.02; requestAnimationFrame(render);
     }
 
-    // Прив'язка подій до кнопок (виправляємо роботу на телефонах)
-    document.getElementById('mainStartBtn').addEventListener('click', start);
-    document.getElementById('mainStartBtn').addEventListener('touchstart', (e) => { e.preventDefault(); start(); });
-
-    document.getElementById('fullBtn').addEventListener('click', toggleFullScreen);
-    document.getElementById('fullBtn').addEventListener('touchstart', (e) => { e.preventDefault(); toggleFullScreen(); });
-
-    document.getElementById('sleepBtn').addEventListener('click', () => startTimer(30));
-    document.getElementById('sleepBtn').addEventListener('touchstart', (e) => { e.preventDefault(); startTimer(30); });
-
-    function startTimer(minutes) {
-        if (audioCtx) audioCtx.resume();
-        timeLeft = minutes * 60;
-        clearInterval(timerInterval);
-        document.getElementById('sleepBtn').innerText = "АКТИВНО";
-        timerInterval = setInterval(() => {
-            timeLeft--;
-            let m = Math.floor(timeLeft / 60); let s = timeLeft % 60;
-            document.getElementById('timer-display').innerText = `ВИМКНЕННЯ: ${m}:${s < 10 ? '0'+s : s}`;
-            if (timeLeft <= 300) {
-                let fade = timeLeft / 300;
-                if(masterGain) masterGain.gain.value = (document.getElementById('vol').value) * fade;
-            }
-            if (timeLeft <= 0) { clearInterval(timerInterval); location.reload(); }
-        }, 1000);
-    }
-
-    function toggleFullScreen() {
-        if (audioCtx) audioCtx.resume();
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(() => {});
-        } else {
-            if (document.exitFullscreen) document.exitFullscreen();
-        }
-    }
+    document.getElementById('startBtn').addEventListener('click', start);
+    document.getElementById('startBtn').addEventListener('touchstart', (e) => { e.preventDefault(); start(); });
 
     document.getElementById('vol').oninput = (e) => {
         if(masterGain) masterGain.gain.value = e.target.value;
     };
 
     window.addEventListener('resize', init);
-    imgObj.onload = init;
     init(); render();
 </script>
 </body>
