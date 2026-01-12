@@ -16,11 +16,16 @@
 
         canvas { position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none; mix-blend-mode: screen; }
 
-        /* Стилі для мобільних (зменшуємо кнопки) */
+        #intro {
+            position: absolute; z-index: 100; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: black; transition: 1.5s; color: #fa0; font-family: 'Courier New', monospace;
+        }
+
         .controls {
             position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
             z-index: 110; text-align: center; display: flex; flex-direction: column; gap: 8px;
-            width: 90%; max-width: 300px; opacity: 0.3; transition: 0.5s;
+            width: 90%; max-width: 320px; opacity: 0.4; transition: 0.5s;
         }
         .controls:hover { opacity: 1; }
 
@@ -28,33 +33,36 @@
         
         button { 
             background: none; border: 1px solid #fa0; color: #fa0; 
-            padding: 8px 12px; cursor: pointer; font-size: 10px; 
-            letter-spacing: 1px; flex: 1;
+            padding: 10px; cursor: pointer; font-size: 10px; 
+            letter-spacing: 1px; flex: 1; text-transform: uppercase;
         }
 
-        /* Повзунок гучності: тонший на мобілці */
         input[type=range] { 
-            width: 100%; height: 4px; accent-color: #fa0; cursor: pointer; 
+            width: 100%; height: 4px; accent-color: #fa0; cursor: pointer; margin-top: 5px;
         }
 
-        #timer-display { color: #fa0; font-size: 9px; height: 10px; }
+        #timer-display { color: #fa0; font-size: 9px; height: 10px; margin-top: 2px; }
 
         @media (max-width: 600px) {
-            button { padding: 6px 8px; font-size: 8px; }
-            .controls { bottom: 15px; }
+            button { padding: 8px; font-size: 9px; }
+            .controls { bottom: 30px; }
         }
     </style>
 </head>
 <body>
 
+<div id="intro">
+    <h1 style="font-weight: 100; letter-spacing: 5px; font-size: 16px;">ARCHER RESONANCE</h1>
+    <button onclick="start()" style="flex:none; width: 200px;">[ АКТИВУВАТИ ]</button>
+</div>
+
 <div id="bg"></div>
 <canvas id="canvas"></canvas>
 
-<div class="controls" id="ui">
+<div class="controls">
     <div class="btn-row">
-        <button onclick="start()">[ ACTIVATE ]</button>
-        <button onclick="toggleFullScreen()">[ FULL ]</button>
-        <button id="sleepBtn" onclick="startTimer(30)">[ SLEEP 30 ]</button>
+        <button onclick="toggleFullScreen()">[ ПОВНИЙ ]</button>
+        <button id="sleepBtn" onclick="startTimer(30)">[ СОН 30 ]</button>
     </div>
     <input type="range" id="vol" min="0" max="1" step="0.01" value="0.5">
     <div id="timer-display"></div>
@@ -62,11 +70,10 @@
 
 <script>
     let audioCtx, masterGain, isLaunched = false, t = 0, flowerAlpha = 0;
+    let timerInterval, timeLeft = 0;
     const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
     let w, h, stars = [];
     
-    // Параметри вашої картинки (треба знати оригінальний розмір для точної прив'язки)
-    // Якщо ви не знаєте розмір, скрипт спробує вгадати пропорції
     const imgObj = new Image();
     imgObj.src = 'mask.png';
 
@@ -77,32 +84,69 @@
         for (let i = 0; i < 200; i++) stars.push({ x: Math.random()*w-w/2, y: Math.random()*h-h/2, z: Math.random()*w });
     }
 
-    // Функція пошуку координат центру маски на екрані
     function getMaskAnchor() {
-        if (!imgObj.complete) return { x: w/2, y: h/2 };
-
+        if (!imgObj.complete || imgObj.width === 0) return { x: w/2, y: h/2, scale: h/1000 };
         const imgRatio = imgObj.width / imgObj.height;
         const screenRatio = w / h;
         let drawW, drawH, offsetX, offsetY;
-
         if (screenRatio > imgRatio) {
-            // Екран ширший за маску (поля з боків)
-            drawH = h;
-            drawW = h * imgRatio;
+            drawH = h; drawW = h * imgRatio;
         } else {
-            // Екран вищий за маску (поля зверху/знизу)
-            drawW = w;
-            drawH = w / imgRatio;
+            drawW = w; drawH = w / imgRatio;
         }
-
         offsetX = (w - drawW) / 2;
         offsetY = (h - drawH) / 2;
-
         return {
             x: offsetX + drawW / 2,
-            y: offsetY + drawH / 2 + (drawH * 0.035), // 0.035 — це ваші 30 пікселів у відсотках від маски
-            scale: drawH / 1000 // Масштабування зірки відносно розміру маски
+            y: offsetY + drawH / 2 + (drawH * 0.038), // Ваше коригування 30 пікселів
+            scale: drawH / 1000
         };
+    }
+
+    async function start() {
+        if (audioCtx) return;
+        document.getElementById('intro').style.opacity = '0';
+        setTimeout(() => document.getElementById('intro').style.display = 'none', 1500);
+        
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0;
+        masterGain.connect(audioCtx.destination);
+
+        // 432Hz Tone
+        const osc = audioCtx.createOscillator();
+        osc.frequency.value = 432;
+        const oGain = audioCtx.createGain(); oGain.gain.value = 0.15;
+        osc.connect(oGain).connect(masterGain);
+        osc.start();
+
+        // Fire Noise
+        const bSize = 2 * audioCtx.sampleRate, bBuffer = audioCtx.createBuffer(1, bSize, audioCtx.sampleRate), bOut = bBuffer.getChannelData(0);
+        let lastOut = 0;
+        for (let i = 0; i < bSize; i++) {
+            let white = Math.random() * 2 - 1;
+            bOut[i] = (lastOut + (0.02 * white)) / 1.002;
+            lastOut = bOut[i]; bOut[i] *= 3.5;
+        }
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = bBuffer; noise.loop = true;
+        const nGain = audioCtx.createGain(); nGain.gain.value = 0.08;
+        noise.connect(nGain).connect(masterGain);
+        noise.start();
+
+        // Музика
+        try {
+            const res = await fetch('audio.mp3');
+            const buf = await res.arrayBuffer();
+            const aBuf = await audioCtx.decodeAudioData(buf);
+            const src = audioCtx.createBufferSource();
+            src.buffer = aBuf; src.loop = true;
+            src.connect(masterGain);
+            src.start();
+        } catch(e) { console.log("MP3 не знайдено"); }
+
+        masterGain.gain.linearRampToValueAtTime(document.getElementById('vol').value, audioCtx.currentTime + 3);
+        isLaunched = true;
     }
 
     function drawZenFlower(len, ang, col) {
@@ -117,16 +161,12 @@
     function render() {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
         ctx.fillRect(0, 0, w, h);
-
         const anchor = getMaskAnchor();
         const growth = 0.7 + Math.sin(t * 1.5) * 0.3;
-        
-        // "Дихання" фону
         document.getElementById('bg').style.opacity = 0.4 + (growth * 0.5);
 
-        // Зірки (тунель)
         stars.forEach(s => {
-            s.z -= 1; if (s.z <= 0) s.z = w;
+            s.z -= 1.2; if (s.z <= 0) s.z = w;
             const px = (s.x / s.z) * w + w / 2;
             const py = (s.y / s.z) * h + h / 2;
             ctx.fillStyle = `rgba(255, 170, 0, ${1 - s.z/w})`;
@@ -136,25 +176,50 @@
         if (isLaunched) {
             if (flowerAlpha < 1) flowerAlpha += 0.005;
             ctx.save();
-            ctx.translate(anchor.x, anchor.y); // ПРИВ'ЯЗКА ДО МАСКИ
+            ctx.translate(anchor.x, anchor.y);
             ctx.globalAlpha = flowerAlpha;
-            
-            // Масштабуємо розмір зірки під розмір маски
-            const size = 200 * anchor.scale * growth; 
-
+            const size = 220 * anchor.scale * growth; 
             for(let i=0; i<8; i++) {
-                drawZenFlower(size, (Math.PI*2/8)*i + (t*0.05), '#fa0');
+                drawZenFlower(size, (Math.PI*2/8)*i + (t*0.04), '#fa0');
             }
             ctx.restore();
         }
-
         t += 0.02; requestAnimationFrame(render);
     }
 
-    // (Функції звуку, таймера та повного екрана залишаються без змін...)
-    // ... скопіюйте їх з попереднього коду ...
+    function startTimer(minutes) {
+        timeLeft = minutes * 60;
+        clearInterval(timerInterval);
+        document.getElementById('sleepBtn').innerText = "АКТИВНО";
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            let m = Math.floor(timeLeft / 60);
+            let s = timeLeft % 60;
+            document.getElementById('timer-display').innerText = `ДО ВИМКНЕННЯ: ${m}:${s < 10 ? '0'+s : s}`;
+            if (timeLeft <= 300) {
+                let fade = timeLeft / 300;
+                if(masterGain) masterGain.gain.value = (document.getElementById('vol').value) * fade;
+            }
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                location.reload();
+            }
+        }, 1000);
+    }
 
-    window.onresize = init;
+    function toggleFullScreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(e => console.log(e));
+        } else {
+            if (document.exitFullscreen) document.exitFullscreen();
+        }
+    }
+
+    document.getElementById('vol').oninput = (e) => {
+        if(masterGain) masterGain.gain.value = e.target.value;
+    };
+
+    window.addEventListener('resize', init);
     imgObj.onload = init;
     init(); render();
 </script>
