@@ -3,57 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Zen Mask: Absolute Anchor</title>
+    <title>Zen Mask: Ultimate</title>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; }
-        
-        #bg {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: url('mask.png') no-repeat center center;
-            background-size: contain;
-            z-index: 1;
-        }
-
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; -webkit-tap-highlight-color: transparent; }
+        #bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: url('mask.png') no-repeat center center; background-size: contain; z-index: 1; pointer-events: none; }
         canvas { position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none; mix-blend-mode: screen; }
-
-        #intro {
-            position: absolute; z-index: 100; width: 100%; height: 100%;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            background: black; transition: 1.5s; color: #fa0; font-family: 'Courier New', monospace;
-        }
-
-        .controls {
-            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 110; text-align: center; display: flex; flex-direction: column; gap: 8px;
-            width: 90%; max-width: 320px; opacity: 0.4; transition: 0.5s;
-        }
-        .controls:hover { opacity: 1; }
-
-        .btn-row { display: flex; gap: 5px; justify-content: center; }
-        
-        button { 
-            background: none; border: 1px solid #fa0; color: #fa0; 
-            padding: 10px; cursor: pointer; font-size: 10px; 
-            letter-spacing: 1px; flex: 1; text-transform: uppercase;
-        }
-
-        input[type=range] { 
-            width: 100%; height: 4px; accent-color: #fa0; cursor: pointer; margin-top: 5px;
-        }
-
-        #timer-display { color: #fa0; font-size: 9px; height: 10px; margin-top: 2px; }
-
-        @media (max-width: 600px) {
-            button { padding: 8px; font-size: 9px; }
-            .controls { bottom: 30px; }
-        }
+        #intro { position: absolute; z-index: 100; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: black; transition: 1s; color: #fa0; font-family: 'Courier New', monospace; }
+        .controls { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 110; text-align: center; display: flex; flex-direction: column; gap: 12px; width: 280px; opacity: 0.6; }
+        .btn-row { display: flex; gap: 10px; justify-content: center; width: 100%; }
+        button { background: rgba(0,0,0,0.5); border: 1px solid #fa0; color: #fa0; padding: 12px; cursor: pointer; font-size: 11px; letter-spacing: 1px; flex: 1; text-transform: uppercase; font-family: inherit; outline: none; }
+        button:active { background: #fa0; color: #000; }
+        input[type=range] { width: 100%; height: 20px; accent-color: #fa0; cursor: pointer; }
+        #timer-display { color: #fa0; font-size: 10px; margin-top: 4px; font-family: monospace; }
     </style>
 </head>
 <body>
 
 <div id="intro">
-    <h1 style="font-weight: 100; letter-spacing: 5px; font-size: 16px;">ARCHER RESONANCE</h1>
-    <button onclick="start()" style="flex:none; width: 200px;">[ АКТИВУВАТИ ]</button>
+    <h1 style="font-weight: 100; letter-spacing: 5px; font-size: 18px; margin-bottom: 30px;">ARCHER RESONANCE</h1>
+    <button id="mainStartBtn" style="flex:none; width: 200px;">[ АКТИВУВАТИ ]</button>
 </div>
 
 <div id="bg"></div>
@@ -61,8 +29,8 @@
 
 <div class="controls">
     <div class="btn-row">
-        <button onclick="toggleFullScreen()">[ ПОВНИЙ ]</button>
-        <button id="sleepBtn" onclick="startTimer(30)">[ СОН 30 ]</button>
+        <button id="fullBtn">[ ПОВНИЙ ]</button>
+        <button id="sleepBtn">[ СОН 30 ]</button>
     </div>
     <input type="range" id="vol" min="0" max="1" step="0.01" value="0.5">
     <div id="timer-display"></div>
@@ -73,54 +41,45 @@
     let timerInterval, timeLeft = 0;
     const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
     let w, h, stars = [];
-    
-    const imgObj = new Image();
-    imgObj.src = 'mask.png';
+    const imgObj = new Image(); imgObj.src = 'mask.png';
 
     function init() {
         w = canvas.width = window.innerWidth;
         h = canvas.height = window.innerHeight;
-        stars = []; 
-        for (let i = 0; i < 200; i++) stars.push({ x: Math.random()*w-w/2, y: Math.random()*h-h/2, z: Math.random()*w });
+        stars = []; for (let i = 0; i < 150; i++) stars.push({ x: Math.random()*w-w/2, y: Math.random()*h-h/2, z: Math.random()*w });
     }
 
     function getMaskAnchor() {
         if (!imgObj.complete || imgObj.width === 0) return { x: w/2, y: h/2, scale: h/1000 };
         const imgRatio = imgObj.width / imgObj.height;
         const screenRatio = w / h;
-        let drawW, drawH, offsetX, offsetY;
-        if (screenRatio > imgRatio) {
-            drawH = h; drawW = h * imgRatio;
-        } else {
-            drawW = w; drawH = w / imgRatio;
-        }
-        offsetX = (w - drawW) / 2;
-        offsetY = (h - drawH) / 2;
+        let drawW, drawH;
+        if (screenRatio > imgRatio) { drawH = h; drawW = h * imgRatio; }
+        else { drawW = w; drawH = w / imgRatio; }
         return {
-            x: offsetX + drawW / 2,
-            y: offsetY + drawH / 2 + (drawH * 0.038), // Ваше коригування 30 пікселів
+            x: (w - drawW) / 2 + drawW / 2,
+            y: (h - drawH) / 2 + drawH / 2 + (drawH * 0.038),
             scale: drawH / 1000
         };
     }
 
     async function start() {
-        if (audioCtx) return;
+        if (audioCtx) { audioCtx.resume(); return; }
+        
         document.getElementById('intro').style.opacity = '0';
-        setTimeout(() => document.getElementById('intro').style.display = 'none', 1500);
+        setTimeout(() => document.getElementById('intro').style.display = 'none', 1000);
         
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         masterGain = audioCtx.createGain();
         masterGain.gain.value = 0;
         masterGain.connect(audioCtx.destination);
 
-        // 432Hz Tone
         const osc = audioCtx.createOscillator();
         osc.frequency.value = 432;
-        const oGain = audioCtx.createGain(); oGain.gain.value = 0.15;
+        const oGain = audioCtx.createGain(); oGain.gain.value = 0.12;
         osc.connect(oGain).connect(masterGain);
         osc.start();
 
-        // Fire Noise
         const bSize = 2 * audioCtx.sampleRate, bBuffer = audioCtx.createBuffer(1, bSize, audioCtx.sampleRate), bOut = bBuffer.getChannelData(0);
         let lastOut = 0;
         for (let i = 0; i < bSize; i++) {
@@ -130,11 +89,10 @@
         }
         const noise = audioCtx.createBufferSource();
         noise.buffer = bBuffer; noise.loop = true;
-        const nGain = audioCtx.createGain(); nGain.gain.value = 0.08;
+        const nGain = audioCtx.createGain(); nGain.gain.value = 0.06;
         noise.connect(nGain).connect(masterGain);
         noise.start();
 
-        // Музика
         try {
             const res = await fetch('audio.mp3');
             const buf = await res.arrayBuffer();
@@ -143,7 +101,7 @@
             src.buffer = aBuf; src.loop = true;
             src.connect(masterGain);
             src.start();
-        } catch(e) { console.log("MP3 не знайдено"); }
+        } catch(e) {}
 
         masterGain.gain.linearRampToValueAtTime(document.getElementById('vol').value, audioCtx.currentTime + 3);
         isLaunched = true;
@@ -179,37 +137,43 @@
             ctx.translate(anchor.x, anchor.y);
             ctx.globalAlpha = flowerAlpha;
             const size = 220 * anchor.scale * growth; 
-            for(let i=0; i<8; i++) {
-                drawZenFlower(size, (Math.PI*2/8)*i + (t*0.04), '#fa0');
-            }
+            for(let i=0; i<8; i++) drawZenFlower(size, (Math.PI*2/8)*i + (t*0.04), '#fa0');
             ctx.restore();
         }
         t += 0.02; requestAnimationFrame(render);
     }
 
+    // Прив'язка подій до кнопок (виправляємо роботу на телефонах)
+    document.getElementById('mainStartBtn').addEventListener('click', start);
+    document.getElementById('mainStartBtn').addEventListener('touchstart', (e) => { e.preventDefault(); start(); });
+
+    document.getElementById('fullBtn').addEventListener('click', toggleFullScreen);
+    document.getElementById('fullBtn').addEventListener('touchstart', (e) => { e.preventDefault(); toggleFullScreen(); });
+
+    document.getElementById('sleepBtn').addEventListener('click', () => startTimer(30));
+    document.getElementById('sleepBtn').addEventListener('touchstart', (e) => { e.preventDefault(); startTimer(30); });
+
     function startTimer(minutes) {
+        if (audioCtx) audioCtx.resume();
         timeLeft = minutes * 60;
         clearInterval(timerInterval);
         document.getElementById('sleepBtn').innerText = "АКТИВНО";
         timerInterval = setInterval(() => {
             timeLeft--;
-            let m = Math.floor(timeLeft / 60);
-            let s = timeLeft % 60;
-            document.getElementById('timer-display').innerText = `ДО ВИМКНЕННЯ: ${m}:${s < 10 ? '0'+s : s}`;
+            let m = Math.floor(timeLeft / 60); let s = timeLeft % 60;
+            document.getElementById('timer-display').innerText = `ВИМКНЕННЯ: ${m}:${s < 10 ? '0'+s : s}`;
             if (timeLeft <= 300) {
                 let fade = timeLeft / 300;
                 if(masterGain) masterGain.gain.value = (document.getElementById('vol').value) * fade;
             }
-            if (timeLeft <= 0) {
-                clearInterval(timerInterval);
-                location.reload();
-            }
+            if (timeLeft <= 0) { clearInterval(timerInterval); location.reload(); }
         }, 1000);
     }
 
     function toggleFullScreen() {
+        if (audioCtx) audioCtx.resume();
         if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(e => console.log(e));
+            document.documentElement.requestFullscreen().catch(() => {});
         } else {
             if (document.exitFullscreen) document.exitFullscreen();
         }
