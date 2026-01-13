@@ -77,15 +77,27 @@
     const audioDataPromise = preloadAudio();
 
     function init() {
+        // Визначаємо реальний коефіцієнт пікселів
         dpr = window.devicePixelRatio || 1;
         w = window.innerWidth;
         h = window.innerHeight;
+
+        // Встановлюємо фізичний розмір полотна
         canvas.width = w * dpr;
         canvas.height = h * dpr;
-        ctx.scale(dpr, dpr); // Корекція чіткості для телефонів
+
+        // Встановлюємо візуальний розмір через CSS
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+
+        // Важливо: скидаємо масштаб перед налаштуванням нового
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr); 
         
         stars = []; 
-        for (let i = 0; i < 150; i++) stars.push({ x: Math.random()*w-w/2, y: Math.random()*h-h/2, z: Math.random()*w });
+        for (let i = 0; i < 150; i++) {
+            stars.push({ x: Math.random()*w-w/2, y: Math.random()*h-h/2, z: Math.random()*w });
+        }
     }
 
     async function start() {
@@ -163,30 +175,43 @@
     }
 
     function render() {
+        // Використовуємо w та h (логічні пікселі), щоб очищення працювало всюди
         ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
         ctx.fillRect(0, 0, w, h);
+
         const anchor = getMaskAnchor();
         const growth = 0.7 + Math.sin(t * 1.5) * 0.3;
         
+        // Зірки
         stars.forEach(s => {
             s.z -= 1.2; if (s.z <= 0) s.z = w;
             const px = (s.x / s.z) * w + w / 2;
             const py = (s.y / s.z) * h + h / 2;
             ctx.fillStyle = `rgba(255, 170, 0, ${1 - s.z/w})`;
-            ctx.beginPath(); ctx.arc(px, py, (1-s.z/w)*1.5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); 
+            ctx.arc(px, py, (1-s.z/w)*1.5, 0, Math.PI*2); 
+            ctx.fill();
         });
 
         if (isLaunched) {
             if (flowerAlpha < 1) flowerAlpha += 0.01;
             ctx.save();
+            // Тепер anchor.x та anchor.y — це логічні координати, вони не з'їдуть
             ctx.translate(anchor.x, anchor.y);
             ctx.globalAlpha = flowerAlpha;
+            
+            // Налаштовуємо товщину ліній залежно від екрана
+            ctx.lineWidth = 1.2; 
+            
             const size = 220 * anchor.scale * growth; 
-            for(let i=0; i<8; i++) drawZenFlower(size, (Math.PI*2/8)*i + (t*0.04), '#fa0');
+            for(let i=0; i<8; i++) {
+                drawZenFlower(size, (Math.PI*2/8)*i + (t*0.04), '#fa0');
+            }
             ctx.restore();
             document.getElementById('bg').style.opacity = 0.4 + (growth * 0.5);
         }
-        t += 0.02; requestAnimationFrame(render);
+        t += 0.02; 
+        requestAnimationFrame(render);
     }
 
     // Слухачі подій
