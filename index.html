@@ -3,69 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Zen Mask: Final Fix</title>
+    <title>Zen Mask: Universal</title>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; }
-        #bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: url('mask.png') no-repeat center center; background-size: contain; z-index: 1; opacity: 0.5; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; -webkit-tap-highlight-color: transparent; }
+        #bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: url('mask.png') no-repeat center center; background-size: contain; z-index: 1; opacity: 0.5; pointer-events: none; }
         canvas { position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none; mix-blend-mode: screen; }
+        
         #intro { position: absolute; z-index: 100; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: black; transition: 1s; color: #fa0; text-align: center; }
-        .controls { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 110; display: flex; flex-direction: column; gap: 10px; width: 280px; opacity: 0.5; }
-        button { background: none; border: 1px solid #fa0; color: #fa0; padding: 12px; cursor: pointer; text-transform: uppercase; font-size: 11px; }
-        #status { font-size: 9px; margin-top: 15px; color: #666; }
+        
+        .controls { 
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); 
+            z-index: 110; display: flex; flex-direction: column; gap: 10px; 
+            width: 90%; max-width: 320px; opacity: 0.6; transition: 0.5s;
+        }
+        .controls:hover { opacity: 1; }
+        
+        .btn-row { display: flex; gap: 8px; width: 100%; }
+        button { 
+            background: rgba(0,0,0,0.6); border: 1px solid #fa0; color: #fa0; 
+            padding: 12px 5px; cursor: pointer; text-transform: uppercase; 
+            font-size: 9px; flex: 1; font-family: inherit;
+        }
+        button:active { background: #fa0; color: #000; }
+        
+        input[type=range] { width: 100%; height: 15px; accent-color: #fa0; cursor: pointer; margin: 5px 0; }
+        #timer-display { color: #fa0; font-size: 10px; text-align: center; height: 12px; letter-spacing: 1px; }
+        #status { font-size: 8px; margin-top: 15px; color: #444; letter-spacing: 1px; }
     </style>
 </head>
 <body>
 
 <div id="intro">
-    <h1 style="font-weight: 100; letter-spacing: 5px;">ARCHER RESONANCE</h1>
-    <button id="startBtn">[ ЗАПУСТИТИ РЕЗОНАНС ]</button>
-    <div id="status">Очікування медіафайлів...</div>
+    <h1 style="font-weight: 100; letter-spacing: 5px; font-size: 18px;">ARCHER RESONANCE</h1>
+    <button id="startBtn" style="flex:none; width: 220px; font-size: 11px;">[ УВІЙТИ В РЕЗОНАНС ]</button>
+    <div id="status">ЗАВАНТАЖЕННЯ МОДУЛІВ...</div>
 </div>
 
 <div id="bg"></div>
 <canvas id="canvas"></canvas>
 
-<div class="controls">
+<div class="controls" id="mainUI" style="display: none;">
+    <div class="btn-row">
+        <button id="fullBtn">[ ПОВНИЙ ЕКРАН ]</button>
+        <button id="sleepBtn">[ ТАЙМЕР СОНУ ]</button>
+    </div>
     <input type="range" id="vol" min="0" max="1" step="0.01" value="0.5">
-    <div id="timer-display" style="color:#fa0; font-size:10px; text-align:center;"></div>
+    <div id="timer-display"></div>
 </div>
 
 <script>
     let audioCtx, masterGain, isLaunched = false, t = 0, flowerAlpha = 0;
+    let timerInterval, timeLeft = 0;
     const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
-    let w, h, stars = [];
+    let w, h, stars = [], dpr = window.devicePixelRatio || 1;
     let audioBuffer = null;
 
     const imgObj = new Image();
     imgObj.src = 'mask.png';
-    imgObj.onload = () => { document.getElementById('status').innerText += " | МАСКА OK"; init(); };
+    imgObj.onload = () => { document.getElementById('status').innerText += " | МАСКА ОК"; init(); };
 
-    // Попереднє завантаження музики
     async function preloadAudio() {
         try {
             const response = await fetch('audio.mp3');
             if (!response.ok) throw new Error();
             const arrayBuffer = await response.arrayBuffer();
-            document.getElementById('status').innerText += " | МУЗИКА ЗАВАНТАЖЕНА";
+            document.getElementById('status').innerText += " | МУЗИКА ОК";
             return arrayBuffer;
         } catch (e) {
-            document.getElementById('status').innerText += " | МУЗИКА НЕ ЗНАЙДЕНА";
+            document.getElementById('status').innerText += " | МУЗИКА (X)";
             return null;
         }
     }
-
     const audioDataPromise = preloadAudio();
 
     function init() {
-        w = canvas.width = window.innerWidth;
-        h = canvas.height = window.innerHeight;
-        stars = []; for (let i = 0; i < 150; i++) stars.push({ x: Math.random()*w-w/2, y: Math.random()*h-h/2, z: Math.random()*w });
+        dpr = window.devicePixelRatio || 1;
+        w = window.innerWidth;
+        h = window.innerHeight;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        ctx.scale(dpr, dpr); // Корекція чіткості для телефонів
+        
+        stars = []; 
+        for (let i = 0; i < 150; i++) stars.push({ x: Math.random()*w-w/2, y: Math.random()*h-h/2, z: Math.random()*w });
     }
 
     async function start() {
         if (isLaunched) return;
-
-        // Створюємо аудіоконтекст ПІСЛЯ кліку
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') await audioCtx.resume();
 
@@ -73,13 +97,14 @@
         masterGain.gain.value = 0;
         masterGain.connect(audioCtx.destination);
 
-        // 432Hz та Шум (генеруються кодом, тому працюють завжди)
+        // 432Hz
         const osc = audioCtx.createOscillator();
         osc.frequency.value = 432;
         const oGain = audioCtx.createGain(); oGain.gain.value = 0.15;
         osc.connect(oGain).connect(masterGain);
         osc.start();
 
+        // Brown Noise
         const bSize = 2 * audioCtx.sampleRate, bBuffer = audioCtx.createBuffer(1, bSize, audioCtx.sampleRate), bOut = bBuffer.getChannelData(0);
         let lastOut = 0;
         for (let i = 0; i < bSize; i++) {
@@ -93,26 +118,29 @@
         noise.connect(nGain).connect(masterGain);
         noise.start();
 
-        // Запуск MP3
+        // MP3
         const rawData = await audioDataPromise;
         if (rawData) {
-            const decodedData = await audioCtx.decodeAudioData(rawData);
-            const source = audioCtx.createBufferSource();
-            source.buffer = decodedData;
-            source.loop = true;
-            source.connect(masterGain);
-            source.start(0);
+            try {
+                const decodedData = await audioCtx.decodeAudioData(rawData);
+                const source = audioCtx.createBufferSource();
+                source.buffer = decodedData; source.loop = true;
+                source.connect(masterGain); source.start(0);
+            } catch(e) { console.error("Audio decode error"); }
         }
 
         masterGain.gain.linearRampToValueAtTime(document.getElementById('vol').value, audioCtx.currentTime + 2);
         
         document.getElementById('intro').style.opacity = '0';
-        setTimeout(() => document.getElementById('intro').style.display = 'none', 1000);
+        setTimeout(() => {
+            document.getElementById('intro').style.display = 'none';
+            document.getElementById('mainUI').style.display = 'flex';
+        }, 1000);
         isLaunched = true;
     }
 
     function getMaskAnchor() {
-        const imgRatio = imgObj.complete ? imgObj.width / imgObj.height : 1;
+        const imgRatio = imgObj.complete && imgObj.width > 0 ? imgObj.width / imgObj.height : 1;
         const screenRatio = w / h;
         let drawW, drawH;
         if (screenRatio > imgRatio) { drawH = h; drawW = h * imgRatio; }
@@ -126,7 +154,8 @@
 
     function drawZenFlower(len, ang, col) {
         ctx.save(); ctx.rotate(ang);
-        ctx.strokeStyle = col; ctx.lineWidth = 1;
+        ctx.strokeStyle = col; 
+        ctx.lineWidth = 1.5; // Трохи товстіша лінія для чіткості
         ctx.beginPath();
         ctx.bezierCurveTo(40, len*0.3, 40, len*0.7, 0, len);
         ctx.bezierCurveTo(-40, len*0.7, -40, len*0.3, 0, 0);
@@ -160,8 +189,32 @@
         t += 0.02; requestAnimationFrame(render);
     }
 
-    document.getElementById('startBtn').addEventListener('click', start);
-    document.getElementById('startBtn').addEventListener('touchstart', (e) => { e.preventDefault(); start(); });
+    // Слухачі подій
+    const startBtn = document.getElementById('startBtn');
+    startBtn.addEventListener('click', start);
+    startBtn.addEventListener('touchstart', (e) => { e.preventDefault(); start(); });
+
+    document.getElementById('fullBtn').addEventListener('click', toggleFullScreen);
+    document.getElementById('sleepBtn').addEventListener('click', () => startTimer(30));
+
+    function startTimer(minutes) {
+        if (audioCtx) audioCtx.resume();
+        timeLeft = minutes * 60;
+        document.getElementById('sleepBtn').innerText = "АКТИВНО";
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            let m = Math.floor(timeLeft / 60), s = timeLeft % 60;
+            document.getElementById('timer-display').innerText = `OFF: ${m}:${s < 10 ? '0'+s : s}`;
+            if (timeLeft <= 0) location.reload();
+        }, 1000);
+    }
+
+    function toggleFullScreen() {
+        if (audioCtx) audioCtx.resume();
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+        else document.exitFullscreen();
+    }
 
     document.getElementById('vol').oninput = (e) => {
         if(masterGain) masterGain.gain.value = e.target.value;
