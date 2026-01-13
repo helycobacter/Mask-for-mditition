@@ -3,36 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Archer Amulet: Stealth UI</title>
+    <title>Archer Amulet: Final Stealth</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
         #bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: url('mask.png') no-repeat center center; background-size: contain; z-index: 1; opacity: 0.5; }
         canvas { position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none; mix-blend-mode: screen; }
         
-        #intro { position: absolute; z-index: 100; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: black; color: #fa0; text-align: center; transition: 0.8s; }
+        #intro { position: absolute; z-index: 100; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: black; color: #fa0; text-align: center; }
         
         .controls { 
             position: absolute; bottom: 0; left: 0; width: 100%; 
             z-index: 110; display: none; flex-direction: column; 
-            background: linear-gradient(transparent, rgba(0,0,0,0.85));
-            padding-bottom: 25px; padding-top: 50px;
-            transition: opacity 0.8s ease; /* Плавність зникнення */
-            opacity: 1;
+            background: linear-gradient(transparent, rgba(0,0,0,0.9));
+            padding-bottom: 30px; padding-top: 50px;
+            transition: opacity 1s cubic-bezier(0.4, 0, 0.2, 1); /* Більш плавний графік зникнення */
         }
-        /* Клас для приховування */
-        .ui-hidden { opacity: 0 !important; pointer-events: none !important; }
 
-        .btn-row { display: flex; justify-content: center; gap: 10px; margin-bottom: 12px; }
-        button { background: rgba(250, 160, 0, 0.1); border: 1px solid #fa0; color: #fa0; padding: 10px 20px; font-size: 10px; text-transform: uppercase; cursor: pointer; }
-        input[type=range] { width: 70%; margin: 0 auto; accent-color: #fa0; }
-        #timer-display { color: #fa0; font-size: 9px; text-align: center; margin-top: 8px; height: 10px; font-family: monospace; }
+        .btn-row { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; }
+        button { background: rgba(250, 160, 0, 0.1); border: 1px solid #fa0; color: #fa0; padding: 10px 20px; font-size: 11px; text-transform: uppercase; cursor: pointer; border-radius: 4px; }
+        input[type=range] { width: 75%; margin: 0 auto; accent-color: #fa0; height: 30px; }
+        #timer-display { color: #fa0; font-size: 10px; text-align: center; margin-top: 10px; height: 12px; font-family: monospace; }
     </style>
 </head>
-<body>
+<body onclick="handleGlobalTouch()" ontouchstart="handleGlobalTouch()">
 
 <div id="intro">
-    <h1 style="font-weight: 100; letter-spacing: 5px; font-size: 18px;">ARCHER RESONANCE</h1>
-    <button onclick="start()" style="padding: 15px 30px;">[ УВІЙТИ ]</button>
+    <h1 style="font-weight: 100; letter-spacing: 5px; font-size: 20px;">ARCHER RESONANCE</h1>
+    <button onclick="start(event)" style="padding: 15px 40px; font-size: 14px;">[ УВІЙТИ ]</button>
 </div>
 
 <div id="bg"></div>
@@ -40,10 +37,10 @@
 
 <div class="controls" id="ui">
     <div class="btn-row">
-        <button onclick="toggleFullScreen()">FULL</button>
-        <button id="sleepBtn" onclick="startTimer(30)">SLEEP 30</button>
+        <button onclick="toggleFullScreen(event)">FULL</button>
+        <button id="sleepBtn" onclick="startTimer(30, event)">SLEEP 30</button>
     </div>
-    <input type="range" id="vol" min="0" max="1" step="0.01" value="0.5">
+    <input type="range" id="vol" min="0" max="1" step="0.01" value="0.5" oninput="changeVol(event)">
     <div id="timer-display"></div>
 </div>
 
@@ -62,23 +59,27 @@
         for (let i = 0; i < 100; i++) stars.push({ x: Math.random()*w-w/2, y: Math.random()*h-h/2, z: Math.random()*w });
     }
 
-    // ЛОГІКА ПРИХОВУВАННЯ UI
-    function showUI() {
+    // ГОЛОВНА ФУНКЦІЯ КЕРУВАННЯ ВИДИМІСТЮ
+    function handleGlobalTouch() {
         if (!isLaunched) return;
-        uiPanel.classList.remove('ui-hidden');
+        
+        // Скасовуємо зникнення та робимо панель видимою
         clearTimeout(uiTimeout);
+        uiPanel.style.display = 'flex';
+        uiPanel.style.opacity = '1';
+        uiPanel.style.pointerEvents = 'auto';
+
+        // Ставимо таймер на зникнення
         uiTimeout = setTimeout(() => {
-            uiPanel.classList.add('ui-hidden');
-        }, 3000); // Зникає через 3 секунди
+            uiPanel.style.opacity = '0';
+            uiPanel.style.pointerEvents = 'none';
+        }, 3000); // 3 секунди
     }
 
-    // Слухачі для активації UI
-    document.addEventListener('touchstart', showUI);
-    document.addEventListener('mousedown', showUI);
-    document.addEventListener('mousemove', showUI);
-
-    async function start() {
+    async function start(e) {
+        if (e) e.stopPropagation(); // Зупиняємо розповсюдження кліку
         if (isLaunched) return;
+
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         masterGain = audioCtx.createGain();
         masterGain.connect(audioCtx.destination);
@@ -94,16 +95,13 @@
             const src = audioCtx.createBufferSource();
             src.buffer = aBuf; src.loop = true;
             src.connect(masterGain); src.start();
-        } catch(e) {}
+        } catch(err) {}
 
         masterGain.gain.value = document.getElementById('vol').value;
-        document.getElementById('intro').style.opacity = '0';
-        setTimeout(() => {
-            document.getElementById('intro').style.display = 'none';
-            uiPanel.style.display = 'flex';
-            isLaunched = true;
-            showUI();
-        }, 800);
+        document.getElementById('intro').style.display = 'none';
+        
+        isLaunched = true;
+        handleGlobalTouch(); // Показуємо і запускаємо таймер приховування
     }
 
     function getCenter() {
@@ -146,22 +144,28 @@
         t += 0.02; requestAnimationFrame(render);
     }
 
-    function startTimer(min) {
+    function startTimer(min, e) {
+        if (e) e.stopPropagation();
         let sec = min * 60;
         document.getElementById('sleepBtn').innerText = "АКТИВНО";
         const timer = setInterval(() => {
             sec--; 
-            document.getElementById('timer-display').innerText = `OFF: ${Math.floor(sec/60)}:${sec%60 < 10 ? '0'+sec%60 : sec%60}`;
+            document.getElementById('timer-display').innerText = `OFF IN: ${Math.floor(sec/60)}:${sec%60 < 10 ? '0'+sec%60 : sec%60}`;
             if(sec <= 0) location.reload();
         }, 1000);
     }
 
-    function toggleFullScreen() {
+    function toggleFullScreen(e) {
+        if (e) e.stopPropagation();
         if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
         else document.exitFullscreen();
     }
 
-    document.getElementById('vol').oninput = (e) => { if(masterGain) masterGain.gain.value = e.target.value; };
+    function changeVol(e) {
+        if (e) e.stopPropagation();
+        if(masterGain) masterGain.gain.value = e.target.value;
+    }
+
     window.onresize = init;
     init(); render();
 </script>
