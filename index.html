@@ -3,171 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Zen Mask: Universal</title>
+    <title>Zen Mask: Mobile Fixed</title>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; -webkit-tap-highlight-color: transparent; }
-        #bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: url('mask.png') no-repeat center center; background-size: contain; z-index: 1; opacity: 0.5; pointer-events: none; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: sans-serif; }
+        
+        #bg { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: url('mask.png') no-repeat center center; 
+            background-size: contain; z-index: 1; opacity: 0.5;
+        }
+
         canvas { position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none; mix-blend-mode: screen; }
-        
-        #intro { position: absolute; z-index: 100; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: black; transition: 1s; color: #fa0; text-align: center; }
-        
+
+        #intro { 
+            position: absolute; z-index: 100; width: 100%; height: 100%; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            background: black; color: #fa0; text-align: center; transition: 0.8s;
+        }
+
+        /* Компактна панель керування */
         .controls { 
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); 
-            z-index: 110; display: flex; flex-direction: column; gap: 10px; 
-            width: 90%; max-width: 320px; opacity: 0.6; transition: 0.5s;
+            position: absolute; bottom: 0; left: 0; width: 100%; 
+            z-index: 110; display: none; flex-direction: column; 
+            background: linear-gradient(transparent, rgba(0,0,0,0.8));
+            padding-bottom: 15px; padding-top: 20px;
         }
-        .controls:hover { opacity: 1; }
+
+        .btn-row { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; }
         
-        .btn-row { display: flex; gap: 8px; width: 100%; }
         button { 
-            background: rgba(0,0,0,0.6); border: 1px solid #fa0; color: #fa0; 
-            padding: 12px 5px; cursor: pointer; text-transform: uppercase; 
-            font-size: 9px; flex: 1; font-family: inherit;
+            background: rgba(250, 160, 0, 0.1); border: 1px solid #fa0; color: #fa0; 
+            padding: 8px 15px; font-size: 10px; text-transform: uppercase; cursor: pointer;
         }
-        button:active { background: #fa0; color: #000; }
+
+        input[type=range] { width: 70%; margin: 0 auto; accent-color: #fa0; opacity: 0.6; }
         
-        input[type=range] { width: 100%; height: 15px; accent-color: #fa0; cursor: pointer; margin: 5px 0; }
-        #timer-display { color: #fa0; font-size: 10px; text-align: center; height: 12px; letter-spacing: 1px; }
-        #status { font-size: 8px; margin-top: 15px; color: #444; letter-spacing: 1px; }
+        #timer-display { color: #fa0; font-size: 9px; text-align: center; margin-top: 5px; height: 10px; }
     </style>
 </head>
 <body>
 
 <div id="intro">
     <h1 style="font-weight: 100; letter-spacing: 5px; font-size: 18px;">ARCHER RESONANCE</h1>
-    <button id="startBtn" style="flex:none; width: 220px; font-size: 11px;">[ УВІЙТИ В РЕЗОНАНС ]</button>
-    <div id="status">ЗАВАНТАЖЕННЯ МОДУЛІВ...</div>
+    <button onclick="start()" style="padding: 15px 30px;">[ УВІЙТИ ]</button>
 </div>
 
 <div id="bg"></div>
 <canvas id="canvas"></canvas>
 
-<div class="controls" id="mainUI" style="display: none;">
+<div class="controls" id="ui">
     <div class="btn-row">
-        <button id="fullBtn">[ ПОВНИЙ ЕКРАН ]</button>
-        <button id="sleepBtn">[ ТАЙМЕР СОНУ ]</button>
+        <button onclick="toggleFullScreen()">FULL</button>
+        <button id="sleepBtn" onclick="startTimer(30)">SLEEP 30</button>
     </div>
     <input type="range" id="vol" min="0" max="1" step="0.01" value="0.5">
     <div id="timer-display"></div>
 </div>
 
 <script>
-    let audioCtx, masterGain, isLaunched = false, t = 0, flowerAlpha = 0;
-    let timerInterval, timeLeft = 0;
+    let audioCtx, masterGain, isLaunched = false, t = 0;
     const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
-    let w, h, stars = [], dpr = window.devicePixelRatio || 1;
-    let audioBuffer = null;
-
-    const imgObj = new Image();
-    imgObj.src = 'mask.png';
-    imgObj.onload = () => { document.getElementById('status').innerText += " | МАСКА ОК"; init(); };
-
-    async function preloadAudio() {
-        try {
-            const response = await fetch('audio.mp3');
-            if (!response.ok) throw new Error();
-            const arrayBuffer = await response.arrayBuffer();
-            document.getElementById('status').innerText += " | МУЗИКА ОК";
-            return arrayBuffer;
-        } catch (e) {
-            document.getElementById('status').innerText += " | МУЗИКА (X)";
-            return null;
-        }
-    }
-    const audioDataPromise = preloadAudio();
+    let w, h, stars = [];
+    const imgObj = new Image(); imgObj.src = 'mask.png';
 
     function init() {
-        // Визначаємо реальний коефіцієнт пікселів
-        dpr = window.devicePixelRatio || 1;
-        w = window.innerWidth;
-        h = window.innerHeight;
-
-        // Встановлюємо фізичний розмір полотна
-        canvas.width = w * dpr;
-        canvas.height = h * dpr;
-
-        // Встановлюємо візуальний розмір через CSS
-        canvas.style.width = w + 'px';
-        canvas.style.height = h + 'px';
-
-        // Важливо: скидаємо масштаб перед налаштуванням нового
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.scale(dpr, dpr); 
-        
-        stars = []; 
-        for (let i = 0; i < 150; i++) {
-            stars.push({ x: Math.random()*w-w/2, y: Math.random()*h-h/2, z: Math.random()*w });
-        }
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+        stars = [];
+        for (let i = 0; i < 100; i++) stars.push({ x: Math.random()*w-w/2, y: Math.random()*h-h/2, z: Math.random()*w });
     }
 
     async function start() {
         if (isLaunched) return;
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') await audioCtx.resume();
-
         masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0;
         masterGain.connect(audioCtx.destination);
-
-        // 432Hz
-        const osc = audioCtx.createOscillator();
-        osc.frequency.value = 432;
-        const oGain = audioCtx.createGain(); oGain.gain.value = 0.15;
-        osc.connect(oGain).connect(masterGain);
-        osc.start();
-
-        // Brown Noise
-        const bSize = 2 * audioCtx.sampleRate, bBuffer = audioCtx.createBuffer(1, bSize, audioCtx.sampleRate), bOut = bBuffer.getChannelData(0);
-        let lastOut = 0;
-        for (let i = 0; i < bSize; i++) {
-            let white = Math.random() * 2 - 1;
-            bOut[i] = (lastOut + (0.02 * white)) / 1.002;
-            lastOut = bOut[i]; bOut[i] *= 3.5;
-        }
-        const noise = audioCtx.createBufferSource();
-        noise.buffer = bBuffer; noise.loop = true;
-        const nGain = audioCtx.createGain(); nGain.gain.value = 0.08;
-        noise.connect(nGain).connect(masterGain);
-        noise.start();
-
-        // MP3
-        const rawData = await audioDataPromise;
-        if (rawData) {
-            try {
-                const decodedData = await audioCtx.decodeAudioData(rawData);
-                const source = audioCtx.createBufferSource();
-                source.buffer = decodedData; source.loop = true;
-                source.connect(masterGain); source.start(0);
-            } catch(e) { console.error("Audio decode error"); }
-        }
-
-        masterGain.gain.linearRampToValueAtTime(document.getElementById('vol').value, audioCtx.currentTime + 2);
         
+        // Звук 432Hz та шум
+        const osc = audioCtx.createOscillator(); osc.frequency.value = 432;
+        const oG = audioCtx.createGain(); oG.gain.value = 0.1;
+        osc.connect(oG).connect(masterGain); osc.start();
+
+        // Спроба запустити MP3
+        try {
+            const res = await fetch('audio.mp3');
+            const buf = await res.arrayBuffer();
+            const aBuf = await audioCtx.decodeAudioData(buf);
+            const src = audioCtx.createBufferSource();
+            src.buffer = aBuf; src.loop = true;
+            src.connect(masterGain); src.start();
+        } catch(e) {}
+
+        masterGain.gain.value = document.getElementById('vol').value;
         document.getElementById('intro').style.opacity = '0';
         setTimeout(() => {
             document.getElementById('intro').style.display = 'none';
-            document.getElementById('mainUI').style.display = 'flex';
-        }, 1000);
+            document.getElementById('ui').style.display = 'flex';
+        }, 800);
         isLaunched = true;
     }
 
-    function getMaskAnchor() {
-        const imgRatio = imgObj.complete && imgObj.width > 0 ? imgObj.width / imgObj.height : 1;
+    // Спрощена прив'язка до центру маски
+    function getCenter() {
+        const imgRatio = imgObj.complete ? imgObj.width / imgObj.height : 1;
         const screenRatio = w / h;
-        let drawW, drawH;
-        if (screenRatio > imgRatio) { drawH = h; drawW = h * imgRatio; }
-        else { drawW = w; drawH = w / imgRatio; }
-        return {
-            x: (w - drawW) / 2 + drawW / 2,
-            y: (h - drawH) / 2 + drawH / 2 + (drawH * 0.038),
-            scale: drawH / 1000
+        let dH = (screenRatio > imgRatio) ? h : w / imgRatio;
+        // Повертаємо центр екрана + корекція 3.8% від висоти малюнка
+        return { 
+            x: w / 2, 
+            y: h / 2 + (dH * 0.038),
+            s: dH / 1000 
         };
     }
 
-    function drawZenFlower(len, ang, col) {
+    function drawZenFlower(len, ang) {
         ctx.save(); ctx.rotate(ang);
-        ctx.strokeStyle = col; 
-        ctx.lineWidth = 1.5; // Трохи товстіша лінія для чіткості
+        ctx.strokeStyle = '#fa0'; ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.bezierCurveTo(40, len*0.3, 40, len*0.7, 0, len);
         ctx.bezierCurveTo(-40, len*0.7, -40, len*0.3, 0, 0);
@@ -175,77 +126,47 @@
     }
 
     function render() {
-        // Використовуємо w та h (логічні пікселі), щоб очищення працювало всюди
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = 'black'; ctx.globalAlpha = 0.2;
+        ctx.fillRect(0, 0, w, h); ctx.globalAlpha = 1;
 
-        const anchor = getMaskAnchor();
+        const center = getCenter();
         const growth = 0.7 + Math.sin(t * 1.5) * 0.3;
-        
-        // Зірки
+
         stars.forEach(s => {
-            s.z -= 1.2; if (s.z <= 0) s.z = w;
-            const px = (s.x / s.z) * w + w / 2;
-            const py = (s.y / s.z) * h + h / 2;
-            ctx.fillStyle = `rgba(255, 170, 0, ${1 - s.z/w})`;
-            ctx.beginPath(); 
-            ctx.arc(px, py, (1-s.z/w)*1.5, 0, Math.PI*2); 
-            ctx.fill();
+            s.z -= 1.5; if (s.z <= 0) s.z = w;
+            const px = (s.x / s.z) * w + w / 2, py = (s.y / s.z) * h + h / 2;
+            ctx.fillStyle = `rgba(250, 160, 0, ${1 - s.z/w})`;
+            ctx.fillRect(px, py, 1.5, 1.5);
         });
 
         if (isLaunched) {
-            if (flowerAlpha < 1) flowerAlpha += 0.01;
             ctx.save();
-            // Тепер anchor.x та anchor.y — це логічні координати, вони не з'їдуть
-            ctx.translate(anchor.x, anchor.y);
-            ctx.globalAlpha = flowerAlpha;
-            
-            // Налаштовуємо товщину ліній залежно від екрана
-            ctx.lineWidth = 1.2; 
-            
-            const size = 220 * anchor.scale * growth; 
-            for(let i=0; i<8; i++) {
-                drawZenFlower(size, (Math.PI*2/8)*i + (t*0.04), '#fa0');
-            }
+            ctx.translate(center.x, center.y);
+            const size = 200 * center.s * growth;
+            for(let i=0; i<8; i++) drawZenFlower(size, (Math.PI*2/8)*i + t*0.05);
             ctx.restore();
-            document.getElementById('bg').style.opacity = 0.4 + (growth * 0.5);
+            document.getElementById('bg').style.opacity = 0.3 + (growth * 0.5);
         }
-        t += 0.02; 
-        requestAnimationFrame(render);
+        t += 0.02; requestAnimationFrame(render);
     }
 
-    // Слухачі подій
-    const startBtn = document.getElementById('startBtn');
-    startBtn.addEventListener('click', start);
-    startBtn.addEventListener('touchstart', (e) => { e.preventDefault(); start(); });
-
-    document.getElementById('fullBtn').addEventListener('click', toggleFullScreen);
-    document.getElementById('sleepBtn').addEventListener('click', () => startTimer(30));
-
-    function startTimer(minutes) {
-        if (audioCtx) audioCtx.resume();
-        timeLeft = minutes * 60;
-        document.getElementById('sleepBtn').innerText = "АКТИВНО";
-        clearInterval(timerInterval);
-        timerInterval = setInterval(() => {
-            timeLeft--;
-            let m = Math.floor(timeLeft / 60), s = timeLeft % 60;
-            document.getElementById('timer-display').innerText = `OFF: ${m}:${s < 10 ? '0'+s : s}`;
-            if (timeLeft <= 0) location.reload();
+    function startTimer(min) {
+        let sec = min * 60;
+        document.getElementById('sleepBtn').innerText = "ON";
+        const timer = setInterval(() => {
+            sec--; 
+            document.getElementById('timer-display').innerText = `OFF IN: ${Math.floor(sec/60)}:${sec%60}`;
+            if(sec <= 0) location.reload();
         }, 1000);
     }
 
     function toggleFullScreen() {
-        if (audioCtx) audioCtx.resume();
         if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
         else document.exitFullscreen();
     }
 
-    document.getElementById('vol').oninput = (e) => {
-        if(masterGain) masterGain.gain.value = e.target.value;
-    };
-
-    window.addEventListener('resize', init);
+    document.getElementById('vol').oninput = (e) => { if(masterGain) masterGain.gain.value = e.target.value; };
+    window.onresize = init;
     init(); render();
 </script>
 </body>
