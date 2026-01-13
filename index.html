@@ -1,58 +1,169 @@
-<style>
-    /* ... попередні стилі ... */
-    .controls { 
-        position: absolute; bottom: 0; left: 0; width: 100%; 
-        z-index: 110; display: none; flex-direction: column; 
-        background: linear-gradient(transparent, rgba(0,0,0,0.9));
-        padding-bottom: 25px; padding-top: 40px;
-        transition: opacity 1s ease-in-out; /* Плавне зникнення */
-        opacity: 1;
-    }
-    /* Клас для приховування */
-    .controls.hidden { opacity: 0; pointer-events: none; }
-</style>
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Archer Amulet: Stealth UI</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
+        #bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: url('mask.png') no-repeat center center; background-size: contain; z-index: 1; opacity: 0.5; }
+        canvas { position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none; mix-blend-mode: screen; }
+        
+        #intro { position: absolute; z-index: 100; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: black; color: #fa0; text-align: center; transition: 0.8s; }
+        
+        .controls { 
+            position: absolute; bottom: 0; left: 0; width: 100%; 
+            z-index: 110; display: none; flex-direction: column; 
+            background: linear-gradient(transparent, rgba(0,0,0,0.85));
+            padding-bottom: 25px; padding-top: 50px;
+            transition: opacity 0.8s ease; /* Плавність зникнення */
+            opacity: 1;
+        }
+        /* Клас для приховування */
+        .ui-hidden { opacity: 0 !important; pointer-events: none !important; }
+
+        .btn-row { display: flex; justify-content: center; gap: 10px; margin-bottom: 12px; }
+        button { background: rgba(250, 160, 0, 0.1); border: 1px solid #fa0; color: #fa0; padding: 10px 20px; font-size: 10px; text-transform: uppercase; cursor: pointer; }
+        input[type=range] { width: 70%; margin: 0 auto; accent-color: #fa0; }
+        #timer-display { color: #fa0; font-size: 9px; text-align: center; margin-top: 8px; height: 10px; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+<div id="intro">
+    <h1 style="font-weight: 100; letter-spacing: 5px; font-size: 18px;">ARCHER RESONANCE</h1>
+    <button onclick="start()" style="padding: 15px 30px;">[ УВІЙТИ ]</button>
+</div>
+
+<div id="bg"></div>
+<canvas id="canvas"></canvas>
+
+<div class="controls" id="ui">
+    <div class="btn-row">
+        <button onclick="toggleFullScreen()">FULL</button>
+        <button id="sleepBtn" onclick="startTimer(30)">SLEEP 30</button>
+    </div>
+    <input type="range" id="vol" min="0" max="1" step="0.01" value="0.5">
+    <div id="timer-display"></div>
+</div>
 
 <script>
+    let audioCtx, masterGain, isLaunched = false, t = 0;
     let uiTimeout;
+    const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
     const uiPanel = document.getElementById('ui');
+    let w, h, stars = [];
+    const imgObj = new Image(); imgObj.src = 'mask.png';
 
-    // Функція для показу/приховування інтерфейсу
-    function showUI() {
-        uiPanel.classList.remove('hidden');
-        clearTimeout(uiTimeout);
-        // Приховати через 3 секунди, якщо активовано резонанс
-        if (isLaunched) {
-            uiTimeout = setTimeout(() => {
-                uiPanel.classList.add('hidden');
-            }, 3000);
-        }
+    function init() {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+        stars = [];
+        for (let i = 0; i < 100; i++) stars.push({ x: Math.random()*w-w/2, y: Math.random()*h-h/2, z: Math.random()*w });
     }
 
-    // Слухаємо дотики до екрана для повернення кнопок
+    // ЛОГІКА ПРИХОВУВАННЯ UI
+    function showUI() {
+        if (!isLaunched) return;
+        uiPanel.classList.remove('ui-hidden');
+        clearTimeout(uiTimeout);
+        uiTimeout = setTimeout(() => {
+            uiPanel.classList.add('ui-hidden');
+        }, 3000); // Зникає через 3 секунди
+    }
+
+    // Слухачі для активації UI
     document.addEventListener('touchstart', showUI);
+    document.addEventListener('mousedown', showUI);
     document.addEventListener('mousemove', showUI);
 
     async function start() {
         if (isLaunched) return;
-        // ... (ваш існуючий код функції start) ...
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.connect(audioCtx.destination);
         
+        const osc = audioCtx.createOscillator(); osc.frequency.value = 432;
+        const oG = audioCtx.createGain(); oG.gain.value = 0.1;
+        osc.connect(oG).connect(masterGain); osc.start();
+
+        try {
+            const res = await fetch('audio.mp3');
+            const buf = await res.arrayBuffer();
+            const aBuf = await audioCtx.decodeAudioData(buf);
+            const src = audioCtx.createBufferSource();
+            src.buffer = aBuf; src.loop = true;
+            src.connect(masterGain); src.start();
+        } catch(e) {}
+
+        masterGain.gain.value = document.getElementById('vol').value;
         document.getElementById('intro').style.opacity = '0';
         setTimeout(() => {
             document.getElementById('intro').style.display = 'none';
             uiPanel.style.display = 'flex';
-            showUI(); // Запускаємо таймер приховування
+            isLaunched = true;
+            showUI();
         }, 800);
-        isLaunched = true;
+    }
+
+    function getCenter() {
+        const imgRatio = imgObj.complete ? imgObj.width / imgObj.height : 1;
+        const screenRatio = w / h;
+        let dH = (screenRatio > imgRatio) ? h : w / imgRatio;
+        return { x: w / 2, y: h / 2 + (dH * 0.038), s: dH / 1000 };
+    }
+
+    function drawZenFlower(len, ang) {
+        ctx.save(); ctx.rotate(ang);
+        ctx.strokeStyle = '#fa0'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.bezierCurveTo(40, len*0.3, 40, len*0.7, 0, len);
+        ctx.bezierCurveTo(-40, len*0.7, -40, len*0.3, 0, 0);
+        ctx.stroke(); ctx.restore();
+    }
+
+    function render() {
+        ctx.fillStyle = 'black'; ctx.globalAlpha = 0.2;
+        ctx.fillRect(0, 0, w, h); ctx.globalAlpha = 1;
+        const center = getCenter();
+        const growth = 0.7 + Math.sin(t * 1.5) * 0.3;
+
+        stars.forEach(s => {
+            s.z -= 1.5; if (s.z <= 0) s.z = w;
+            const px = (s.x / s.z) * w + w / 2, py = (s.y / s.z) * h + h / 2;
+            ctx.fillStyle = `rgba(250, 160, 0, ${1 - s.z/w})`;
+            ctx.fillRect(px, py, 1.5, 1.5);
+        });
+
+        if (isLaunched) {
+            ctx.save();
+            ctx.translate(center.x, center.y);
+            const size = 200 * center.s * growth;
+            for(let i=0; i<8; i++) drawZenFlower(size, (Math.PI*2/8)*i + t*0.05);
+            ctx.restore();
+            document.getElementById('bg').style.opacity = 0.3 + (growth * 0.5);
+        }
+        t += 0.02; requestAnimationFrame(render);
+    }
+
+    function startTimer(min) {
+        let sec = min * 60;
+        document.getElementById('sleepBtn').innerText = "АКТИВНО";
+        const timer = setInterval(() => {
+            sec--; 
+            document.getElementById('timer-display').innerText = `OFF: ${Math.floor(sec/60)}:${sec%60 < 10 ? '0'+sec%60 : sec%60}`;
+            if(sec <= 0) location.reload();
+        }, 1000);
     }
 
     function toggleFullScreen() {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(()=>{});
-        } else {
-            if (document.exitFullscreen) document.exitFullscreen();
-        }
-        showUI(); // Показати кнопки після перемикання
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+        else document.exitFullscreen();
     }
 
-    // Решта функцій (init, render, getCenter, drawZenFlower) залишаються без змін
+    document.getElementById('vol').oninput = (e) => { if(masterGain) masterGain.gain.value = e.target.value; };
+    window.onresize = init;
+    init(); render();
 </script>
+</body>
+</html>
